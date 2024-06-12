@@ -1,109 +1,106 @@
-import React, { useState, useEffect } from 'react';
+// App.js
+import React, { useState } from 'react';
 import './App.css';
-import { getTasks, addTask, deleteTask, updateTask } from './indexedDB';
+import useTasks from './useTasks';
+import useAddTask from './useAddTask';
+import useDeleteTask from './useDeleteTask';
+import useUpdateTask from './useUpdateTask';
 
 function App() {
-  const [tasks, setTasks] = useState([]);
-  const [newTask, setNewTask] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
+  const tasks = useTasks();
+  const { addNewTask, isLoading: isAddingTask } = useAddTask();
+  const { deleteTaskById, isLoading: isDeletingTask } = useDeleteTask();
+  const { updateTaskById, isLoading: isUpdatingTask } = useUpdateTask();
+  const [newTaskText, setNewTaskText] = useState('');
   const [currentTaskId, setCurrentTaskId] = useState(null);
-
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        const tasksFromDB = await getTasks();
-        setTasks(tasksFromDB);
-      } catch (error) {
-        console.error("Ошибка при загрузке задач:", error);
-        // Показать пользователю сообщение об ошибке
-      }
-    };
-
-    fetchTasks();
-  }, []);
+  const [isEditing, setIsEditing] = useState(false);
 
   const handleAddTask = async () => {
+    if (!newTaskText.trim()) return;
     try {
-      if (newTask.trim()) {
-        const id = await addTask({ text: newTask.trim(), completed: false });
-        setTasks([...tasks, { text: newTask.trim(), completed: false, id }]);
-        setNewTask('');
-      }
+      const id = await addNewTask(newTaskText.trim());
+      setNewTaskText('');
+      console.log('New task added with id:', id);
     } catch (error) {
-      console.error("Ошибка при добавлении задачи:", error);
-      // Показать пользователю сообщение об ошибке
+      console.error('Error adding new task:', error);
+      // Handle error, show user feedback
     }
   };
 
-  const handleDeleteTask = async (id) => {
+  const handleDeleteTask = async (taskId) => {
     try {
-      await deleteTask(id);
-      setTasks(tasks.filter(task => task.id !== id));
+      await deleteTaskById(taskId);
+      console.log('Task deleted with id:', taskId);
     } catch (error) {
-      console.error("Ошибка при удалении задачи:", error);
-      // Показать пользователю сообщение об ошибке
+      console.error('Error deleting task:', error);
+      // Handle error, show user feedback
     }
   };
 
-  const handleToggleTaskCompletion = async (id) => {
+  const handleToggleTaskCompletion = async (taskId) => {
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    const updatedTaskData = { ...taskToUpdate, completed: !taskToUpdate.completed };
     try {
-      const taskToUpdate = tasks.find(task => task.id === id);
-      const updatedTask = { ...taskToUpdate, completed: !taskToUpdate.completed };
-      await updateTask(id, updatedTask);
-      setTasks(tasks.map(task => (task.id === id ? updatedTask : task)));
+      await updateTaskById(taskId, updatedTaskData);
+      console.log('Task updated with id:', taskId);
     } catch (error) {
-      console.error("Ошибка при обновлении статуса задачи:", error);
-      // Показать пользователю сообщение об ошибке
+      console.error('Error updating task:', error);
+      // Handle error, show user feedback
     }
   };
 
-  const handleEditTask = (id) => {
-    const taskToEdit = tasks.find(task => task.id === id);
+  const handleEditTask = (taskId) => {
+    const taskToEdit = tasks.find(task => task.id === taskId);
+    setCurrentTaskId(taskId);
+    setNewTaskText(taskToEdit.text);
     setIsEditing(true);
-    setCurrentTaskId(id);
-    setNewTask(taskToEdit.text);
   };
 
   const handleUpdateTask = async () => {
+    if (!newTaskText.trim()) return;
+    const updatedTaskData = { text: newTaskText.trim(), completed: tasks.find(task => task.id === currentTaskId).completed };
     try {
-      const updatedTask = { text: newTask.trim(), completed: tasks.find(task => task.id === currentTaskId).completed };
-      await updateTask(currentTaskId, updatedTask);
-      setTasks(tasks.map(task => (task.id === currentTaskId ? { ...updatedTask, id: currentTaskId } : task)));
-      setIsEditing(false);
-      setNewTask('');
+      await updateTaskById(currentTaskId, updatedTaskData);
+      setNewTaskText('');
       setCurrentTaskId(null);
+      setIsEditing(false);
+      console.log('Task updated with id:', currentTaskId);
     } catch (error) {
-      console.error("Ошибка при обновлении задачи:", error);
-      // Показать пользователю сообщение об ошибке
+      console.error('Error updating task:', error);
+      // Handle error, show user feedback
     }
   };
 
   const handleKeyDown = (e) => {
+    console.log("Key pressed:", e.key);
+    console.log("isEditing:", isEditing);
     if (e.key === 'Enter') {
+      console.log("Enter key pressed");
       if (isEditing) {
+        console.log("Editing task...");
         handleUpdateTask();
       } else {
+        console.log("Adding task...");
         handleAddTask();
       }
     }
   };
 
-  
+  // Возвращаемый JSX компонента будет размещен здесь
   return (
     <div className="App">
       <header className="App-header">
         <h1>Todo List</h1>
         <input
           type="text"
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-          onKeyDown={handleKeyDown}
+          value={newTaskText}
+          onChange={(e) => setNewTaskText(e.target.value)}
           placeholder="New Task"
         />
         {isEditing ? (
-          <button onClick={handleUpdateTask}>Update Task</button>
+          <button disabled={isUpdatingTask} onClick={handleUpdateTask}>Update Task</button>
         ) : (
-          <button onClick={handleAddTask}>Add Task</button>
+          <button disabled={isAddingTask} onClick={handleAddTask}>Add Task</button>
         )}
         <ul>
           {tasks.map((task) => (
@@ -115,7 +112,7 @@ function App() {
                 {task.text}
               </span>
               <div className="task-buttons">
-                <button onClick={() => handleDeleteTask(task.id)}>Delete</button>
+                <button disabled={isDeletingTask} onClick={() => handleDeleteTask(task.id)}>Delete</button>
                 <button onClick={() => handleEditTask(task.id)}>Edit</button>
               </div>
             </li>
@@ -124,6 +121,13 @@ function App() {
       </header>
     </div>
   );
+
 }
+
+
+
+
+ 
+
 
 export default App;
